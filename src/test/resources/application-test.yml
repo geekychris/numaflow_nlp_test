@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: numaflow-enrichment-app-test
+
+# Test logging configuration
+logging:
+  level:
+    com.example.numaflow: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
+
+# Disable actuator endpoints in tests
+management:
+  endpoints:
+    enabled-by-default: false
+  endpoint:
+    health:
+      enabled: true
+
+# Test server configuration
+server:
+  port: 0  # Random port for tests
+
+# Test-specific app configuration
+app:
+  nlp:
+    fallback-enabled: true
+  processing:
+    batch-size: 10
+    timeout-ms: 5000

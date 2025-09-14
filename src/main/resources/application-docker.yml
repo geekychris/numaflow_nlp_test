@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: numaflow-enrichment-app-docker
+
+# Docker-specific logging
+logging:
+  level:
+    com.example.numaflow: INFO
+    org.springframework: WARN
+  file:
+    name: /app/logs/application.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 5
+
+# Docker networking
+server:
+  port: 8080
+  address: 0.0.0.0
+
+# Health checks optimized for containers
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+# Docker-specific app configuration  
+app:
+  nlp:
+    fallback-enabled: true
+    models:
+      sentence-model: file:/app/models/en-sent.bin
+      tokenizer-model: file:/app/models/en-token.bin
+      ner-models:
+        person: file:/app/models/en-ner-person.bin
+        location: file:/app/models/en-ner-location.bin
+        organization: file:/app/models/en-ner-organization.bin
+  
+  processing:
+    batch-size: 200
+    timeout-ms: 60000

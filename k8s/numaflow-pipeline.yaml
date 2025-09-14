@@ -1,0 +1,198 @@
+apiVersion: numaflow.numaproj.io/v1alpha1
+kind: Pipeline
+metadata:
+  name: text-enrichment-pipeline
+  namespace: numaflow-system
+  labels:
+    app: text-enrichment
+    version: v1.0.0
+spec:
+  # Define the pipeline vertices
+  vertices:
+    # Kafka source vertex
+    - name: kafka-source
+      source:
+        kafka:
+          brokers:
+            - kafka.kafka:9092
+          topic: events
+          consumerGroup: text-enrichment-consumer
+          config:
+            auto.offset.reset: earliest
+            session.timeout.ms: "30000"
+            enable.auto.commit: "true"
+            auto.commit.interval.ms: "5000"
+      scale:
+        min: 1
+        max: 3
+    
+    # Text enrichment processing vertex
+    - name: text-enricher
+      udf:
+        container:
+          image: numaflow/text-enrichment-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "kubernetes"
+            - name: JAVA_OPTS
+              value: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: nlp-models
+              mountPath: /app/models
+              readOnly: true
+        builtin: false
+      scale:
+        min: 2
+        max: 5
+        scaleDownCooldownSeconds: 300
+        scaleUpCooldownSeconds: 60
+        targetProcessingSeconds: 20
+        targetBufferAvailability: 50
+        replicasPerScale: 1
+    
+    # Enriched data sink
+    - name: enriched-sink
+      sink:
+        kafka:
+          brokers:
+            - kafka.kafka:9092
+          topic: enriched-events
+          config:
+            acks: "all"
+            retries: "2147483647"
+            max.in.flight.requests.per.connection: "5"
+            enable.idempotence: "true"
+            batch.size: "16384"
+            linger.ms: "5"
+            compression.type: "snappy"
+
+    # Error handling sink
+    - name: error-sink
+      sink:
+        kafka:
+          brokers:
+            - kafka.kafka:9092
+          topic: enrichment-errors
+          config:
+            acks: "all"
+            retries: "3"
+
+  # Define the edges (data flow)
+  edges:
+    - from: kafka-source
+      to: text-enricher
+      conditions:
+        keyIn: []  # Process all messages
+    
+    - from: text-enricher
+      to: enriched-sink
+      conditions:
+        keyIn: []  # All successful processing results
+    
+    - from: text-enricher
+      to: error-sink
+      conditions:
+        keyIn: ["error"]  # Only error messages
+
+  # Global pipeline settings
+  limits:
+    readBatchSize: 100
+    bufferMaxLength: 1000
+    bufferUsageLimit: 0.8
+
+  # Watermark settings for event time processing
+  watermark:
+    maxDelay: 30s
+    
+---
+# ConfigMap for NLP models (optional - models can be built into the image)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nlp-models-config
+  namespace: numaflow-system
+data:
+  download-models.sh: |
+    #!/bin/bash
+    # This script downloads OpenNLP models at startup
+    # Models will be downloaded to /app/models
+    
+    echo "Downloading NLP models for container startup..."
+    /app/scripts/download-models.sh
+    echo "Model download completed."
+
+---
+# PersistentVolume for NLP models (if using persistent storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nlp-models-pv
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadOnlyMany
+  hostPath:
+    path: /opt/nlp-models
+
+---
+# PersistentVolumeClaim for NLP models
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nlp-models-pvc
+  namespace: numaflow-system
+spec:
+  storageClassName: standard
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# ServiceMonitor for Prometheus monitoring (if using Prometheus)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: text-enrichment-monitor
+  namespace: numaflow-system
+  labels:
+    app: text-enrichment
+spec:
+  selector:
+    matchLabels:
+      app: text-enrichment
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+      scrapeTimeout: 10s

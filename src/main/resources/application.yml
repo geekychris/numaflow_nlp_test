@@ -1,0 +1,80 @@
+spring:
+  application:
+    name: numaflow-enrichment-app
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: enrichment-service
+      auto-offset-reset: earliest
+      enable-auto-commit: true
+    producer:
+      acks: all
+      retries: 2147483647
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
+# Logging configuration
+logging:
+  level:
+    com.example.numaflow: DEBUG
+    org.springframework.kafka: INFO
+    opennlp: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+# Application info
+info:
+  app:
+    name: ${spring.application.name}
+    description: Numaflow text enrichment application with NLP processing
+    version: 0.0.1-SNAPSHOT
+
+# Server configuration (for health checks)
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Custom application properties
+app:
+  nlp:
+    fallback-enabled: true
+    models:
+      sentence-model: classpath:models/en-sent.bin
+      tokenizer-model: classpath:models/en-token.bin
+      ner-models:
+        person: classpath:models/en-ner-person.bin
+        location: classpath:models/en-ner-location.bin
+        organization: classpath:models/en-ner-organization.bin
+  
+  processing:
+    batch-size: 100
+    timeout-ms: 30000
+  
+  test-generator:
+    limits:
+      max-count: 10000
+      max-rate-per-second: 1000
+      max-batch-count: 1000
+    default-topic: events
+    scheduler:
+      pool-size: 2
