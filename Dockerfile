@@ -55,5 +55,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Set JVM options
 ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
-# Run the application
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# Run the standalone Numaflow UDF (not Spring Boot)
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -cp app.jar com.example.numaflow.standalone.NumaflowUDFMain"]

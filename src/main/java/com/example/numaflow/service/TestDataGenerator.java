@@ -5,28 +5,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Service for generating test data and publishing it to Kafka topics.
- * Supports configurable generation rates and record counts.
+ * Service for generating test data for Numaflow UDF testing.
+ * Supports creating sample events for processing.
  */
 @Service
 public class TestDataGenerator {
     
     private static final Logger logger = LoggerFactory.getLogger(TestDataGenerator.class);
-    
-    @Autowired
-    private KafkaTemplate<String, String> kafkaTemplate;
     
     @Autowired
     private ObjectMapper objectMapper;
@@ -78,136 +71,32 @@ public class TestDataGenerator {
     );
     
     /**
-     * Generates and publishes test events to Kafka topic.
+     * Generates a list of test events.
      * 
-     * @param topic Kafka topic to publish to
      * @param count Number of events to generate
-     * @param ratePerSecond Rate of generation (events per second)
-     * @return CompletableFuture that completes when all events are sent
+     * @return List of generated events
      */
-    public CompletableFuture<GenerationResult> generateTestData(String topic, int count, double ratePerSecond) {
-        logger.info("Starting test data generation: {} events to topic '{}' at {} events/sec", 
-                   count, topic, ratePerSecond);
+    public List<Event> generateTestEvents(int count) {
+        logger.info("Generating {} test events", count);
         
-        CompletableFuture<GenerationResult> result = new CompletableFuture<>();
-        
-        // Handle zero count case immediately
-        if (count <= 0) {
-            result.complete(new GenerationResult(0, 0));
-            return result;
-        }
-        
-        AtomicInteger completedCount = new AtomicInteger(0);
-        AtomicInteger successCount = new AtomicInteger(0);
-        AtomicInteger errorCount = new AtomicInteger(0);
-        
-        long intervalMs = (long) (1000.0 / ratePerSecond);
-        Random random = new Random();
-        
-        Runnable generateEvent = () -> {
-            try {
-                Event event = generateRandomEvent(random);
-                String eventJson = objectMapper.writeValueAsString(event);
-                
-                kafkaTemplate.send(topic, event.getId(), eventJson)
-                    .whenComplete((sendResult, throwable) -> {
-                        if (throwable != null) {
-                            logger.error("Failed to send event {}", event.getId(), throwable);
-                            errorCount.incrementAndGet();
-                        } else {
-                            logger.debug("Successfully sent event {} to topic {}", event.getId(), topic);
-                            successCount.incrementAndGet();
-                        }
-                        
-                        int completed = completedCount.incrementAndGet();
-                        if (completed >= count) {
-                            result.complete(new GenerationResult(successCount.get(), errorCount.get()));
-                        }
-                    });
-                    
-            } catch (Exception e) {
-                logger.error("Error generating test event", e);
-                errorCount.incrementAndGet();
-                int completed = completedCount.incrementAndGet();
-                if (completed >= count) {
-                    result.complete(new GenerationResult(successCount.get(), errorCount.get()));
-                }
-            }
-        };
-        
-        if (ratePerSecond <= 1.0) {
-            // For low rates, schedule individual events
-            for (int i = 0; i < count; i++) {
-                scheduler.schedule(generateEvent, (long) (i * intervalMs), TimeUnit.MILLISECONDS);
-            }
-        } else {
-            // For high rates, use fixed rate scheduling
-            final AtomicInteger remaining = new AtomicInteger(count);
-            scheduler.scheduleAtFixedRate(() -> {
-                if (remaining.getAndDecrement() > 0) {
-                    generateEvent.run();
-                }
-            }, 0, intervalMs, TimeUnit.MILLISECONDS);
-        }
-        
-        return result;
-    }
-    
-    /**
-     * Generates a batch of test events immediately.
-     * 
-     * @param topic Kafka topic to publish to
-     * @param count Number of events to generate
-     * @return CompletableFuture that completes when all events are sent
-     */
-    public CompletableFuture<GenerationResult> generateBatch(String topic, int count) {
-        logger.info("Generating batch of {} events to topic '{}'", count, topic);
-        
-        CompletableFuture<GenerationResult> result = new CompletableFuture<>();
-        
-        // Handle zero count case immediately
-        if (count <= 0) {
-            result.complete(new GenerationResult(0, 0));
-            return result;
-        }
-        
-        AtomicInteger completedCount = new AtomicInteger(0);
-        AtomicInteger successCount = new AtomicInteger(0);
-        AtomicInteger errorCount = new AtomicInteger(0);
+        List<Event> events = new ArrayList<>();
         Random random = new Random();
         
         for (int i = 0; i < count; i++) {
-            try {
-                Event event = generateRandomEvent(random);
-                String eventJson = objectMapper.writeValueAsString(event);
-                
-                kafkaTemplate.send(topic, event.getId(), eventJson)
-                    .whenComplete((sendResult, throwable) -> {
-                        if (throwable != null) {
-                            logger.error("Failed to send event {}", event.getId(), throwable);
-                            errorCount.incrementAndGet();
-                        } else {
-                            logger.debug("Successfully sent event {} to topic {}", event.getId(), topic);
-                            successCount.incrementAndGet();
-                        }
-                        
-                        int completed = completedCount.incrementAndGet();
-                        if (completed >= count) {
-                            result.complete(new GenerationResult(successCount.get(), errorCount.get()));
-                        }
-                    });
-                    
-            } catch (Exception e) {
-                logger.error("Error generating test event", e);
-                errorCount.incrementAndGet();
-                int completed = completedCount.incrementAndGet();
-                if (completed >= count) {
-                    result.complete(new GenerationResult(successCount.get(), errorCount.get()));
-                }
-            }
+            events.add(generateRandomEvent(random));
         }
         
-        return result;
+        logger.debug("Generated {} test events successfully", events.size());
+        return events;
+    }
+    
+    /**
+     * Generates a single random test event.
+     * 
+     * @return Random test event
+     */
+    public Event generateSingleEvent() {
+        return generateRandomEvent(new Random());
     }
     
     /**

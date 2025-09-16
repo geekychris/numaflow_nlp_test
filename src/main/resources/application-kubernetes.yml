@@ -7,7 +7,7 @@ logging:
   level:
     com.example.numaflow: INFO
     org.springframework: WARN
-    io.numaproj: DEBUG
+    io.numaproj.numaflow: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%15.15t] %-5level %-40.40logger{39} : %msg%n"
   file:
@@ -23,6 +23,19 @@ server:
   port: 8080
   address: 0.0.0.0
   shutdown: graceful
+
+# Numaflow UDF configuration for Kubernetes
+numaflow:
+  udf:
+    server:
+      port: 8080
+      host: 0.0.0.0
+    grpc:
+      max-message-size: 8388608  # 8MB for Kubernetes
+      max-receive-message-size: 8388608
+    processing:
+      max-batch-size: 500
+      timeout-ms: 120000
 
 # Enhanced health checks for Kubernetes
 management:

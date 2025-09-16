@@ -52,25 +52,17 @@ public class TestGeneratorController {
         String topic = request.getTopic() != null ? request.getTopic() : "events";
         
         try {
-            CompletableFuture<TestDataGenerator.GenerationResult> futureResult = 
-                testDataGenerator.generateTestData(topic, request.getCount(), request.getRatePerSecond());
+            // Generate events directly (no longer using Kafka)
+            var events = testDataGenerator.generateTestEvents(request.getCount());
             
-            // For async generation, return immediately with acceptance
             Map<String, Object> response = new HashMap<>();
-            response.put("status", "accepted");
-            response.put("message", String.format("Generating %d events at %.2f events/sec", 
-                                                 request.getCount(), request.getRatePerSecond()));
+            response.put("status", "completed");
+            response.put("message", String.format("Generated %d test events", events.size()));
             response.put("topic", topic);
-            response.put("estimatedDurationSeconds", request.getCount() / request.getRatePerSecond());
-            
-            // If rate is high enough, wait for completion (for smaller batches)
-            if (request.getRatePerSecond() >= 10 && request.getCount() <= 100) {
-                TestDataGenerator.GenerationResult result = futureResult.get();
-                response.put("status", "completed");
-                response.put("successCount", result.getSuccessCount());
-                response.put("errorCount", result.getErrorCount());
-                response.put("totalCount", result.getTotalCount());
-            }
+            response.put("successCount", events.size());
+            response.put("errorCount", 0);
+            response.put("totalCount", events.size());
+            response.put("note", "Events generated for UDF processing - not published to Kafka");
             
             return ResponseEntity.ok(response);
             
@@ -102,19 +94,17 @@ public class TestGeneratorController {
         String topic = request.getTopic() != null ? request.getTopic() : "events";
         
         try {
-            CompletableFuture<TestDataGenerator.GenerationResult> futureResult = 
-                testDataGenerator.generateBatch(topic, request.getCount());
-            
-            // Wait for batch completion
-            TestDataGenerator.GenerationResult result = futureResult.get();
+            // Generate events directly (no longer using Kafka)
+            var events = testDataGenerator.generateTestEvents(request.getCount());
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "completed");
             response.put("topic", topic);
-            response.put("successCount", result.getSuccessCount());
-            response.put("errorCount", result.getErrorCount());
-            response.put("totalCount", result.getTotalCount());
-            response.put("timestamp", result.getTimestamp());
+            response.put("successCount", events.size());
+            response.put("errorCount", 0);
+            response.put("totalCount", events.size());
+            response.put("timestamp", java.time.LocalDateTime.now());
+            response.put("note", "Events generated for UDF processing - not published to Kafka");
             
             return ResponseEntity.ok(response);
             
@@ -155,18 +145,17 @@ public class TestGeneratorController {
         logger.info("Generating sample events to topic '{}'", topic);
         
         try {
-            CompletableFuture<TestDataGenerator.GenerationResult> futureResult = 
-                testDataGenerator.generateBatch(topic, 5);
-            
-            TestDataGenerator.GenerationResult result = futureResult.get();
+            // Generate sample events directly
+            var events = testDataGenerator.generateTestEvents(5);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "completed");
             response.put("message", "Sample events generated");
             response.put("topic", topic);
-            response.put("successCount", result.getSuccessCount());
-            response.put("errorCount", result.getErrorCount());
-            response.put("totalCount", result.getTotalCount());
+            response.put("successCount", events.size());
+            response.put("errorCount", 0);
+            response.put("totalCount", events.size());
+            response.put("note", "Events generated for UDF processing - not published to Kafka");
             
             return ResponseEntity.ok(response);
             

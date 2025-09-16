@@ -1,35 +1,51 @@
 # Numaflow Text Enrichment Application
 
-A Spring Boot application that enriches Kafka events with NLP processing using Numaflow. This application consumes JSON events from Kafka, performs text segmentation and named entity recognition, and outputs enriched events.
+A production-ready Numaflow application that provides advanced text enrichment capabilities using Apache OpenNLP for Named Entity Recognition (NER) and text segmentation. Designed as a User Defined Function (UDF) for Numaflow streaming pipelines.
 
-## Features
+## 🎯 Overview
 
-- **Text Segmentation**: Splits text into sentences using OpenNLP
-- **Named Entity Recognition**: Identifies persons, locations, and organizations
-- **Local NLP Models**: Uses OpenNLP models that run locally (no external API calls)
-- **Test Data Generation**: Built-in REST API for generating realistic test events with configurable rates
-- **Numaflow Integration**: Implements Numaflow vertex interface for stream processing
-- **Fallback Implementation**: Graceful degradation when NLP models are unavailable
-- **Production Ready**: Includes monitoring, health checks, and scaling configuration
+This application processes streaming text events through a Numaflow pipeline, enriching them with NLP-based insights including:
+- **Text Segmentation**: Intelligent sentence and paragraph detection
+- **Named Entity Recognition**: Person, location, and organization extraction
+- **Metadata Enrichment**: Processing statistics and performance metrics
+- **Tag-based Routing**: Smart routing of enriched, skipped, and error events
 
-## Architecture
+## ✨ Features
+
+- **Numaflow Integration**: Native Mapper implementation with gRPC protocol
+- **Advanced NLP Processing**: OpenNLP with intelligent fallback mechanisms
+- **Event Processing**: Structured JSON event handling with multiple text fields
+- **Production Ready**: Docker containerization and Kubernetes deployment
+- **Monitoring**: Health checks, metrics, and comprehensive logging
+- **Graceful Degradation**: Continues operation when ML models unavailable
+- **Tag-based Routing**: Automatic message routing based on processing results
+
+## 🏗️ Architecture
+
+### Design Overview
 
 ```
-Kafka Topic (events) 
-    ↓
-Numaflow Pipeline
-    ↓
-Text Enrichment Vertex (this application)
-    ↓
-Kafka Topic (enriched-events)
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Kafka Source  │───▶│  Enrichment UDF  │───▶│  Kafka Sinks    │
+│  (input-events) │    │   (gRPC Server)  │    │  (3 topics)     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │  Spring Services │
+                    │  ├─EventEnrich   │
+                    │  ├─NLP Service   │
+                    │  └─OpenNLP       │
+                    └──────────────────┘
 ```
 
 ## Prerequisites
 
-- Java 21 or higher (Amazon Corretto 23 recommended)
-- Maven 3.9+
-- Docker and Docker Compose (for local testing)
-- Kubernetes cluster with Numaflow installed (for production deployment)
+- **Java 21+** (Amazon Corretto 21 recommended)
+- **Maven 3.9+**
+- **Docker** (for containerization)
+- **Kubernetes cluster** with Numaflow installed
+- **Kafka cluster** (for message streaming)
 
 ## Project Structure
 
@@ -52,119 +68,182 @@ Kafka Topic (enriched-events)
 └── models/                     # NLP models directory
 ```
 
-## Quick Start
+### Core Components
 
-### 1. Local Development Setup
+1. **Numaflow Integration** (`com.example.numaflow.vertex`)
+   - `EnrichmentVertex`: Main Numaflow Mapper implementation
+   - `StandaloneEnrichmentMapper`: Standalone UDF for containerized deployment
+
+2. **Event Models** (`com.example.numaflow.model`)
+   - `Event`: Input event structure with text fields
+   - `EnrichedEvent`: Output with enrichment data and metadata
+   - `TextSegment`: Individual processed text segments
+   - `NamedEntity`: Extracted named entities with confidence scores
+
+3. **Processing Services** (`com.example.numaflow.service`)
+   - `EventEnrichmentService`: Main orchestration and batch processing
+   - `NlpEnrichmentService`: OpenNLP integration with fallback implementations
+
+4. **Application Layer** (`com.example.numaflow`)
+   - `NumaflowEnrichmentApplication`: Spring Boot main application
+   - REST controllers for testing and monitoring
+
+### Message Flow
+
+1. **Input**: JSON events from Kafka topic `input-events`
+2. **Processing**: Text enrichment via NLP services
+3. **Routing**: Tag-based routing to appropriate sinks:
+   - `enriched` → `enriched-events` topic
+   - `skipped` → `skipped-events` topic  
+   - `error` → `error-events` topic
+
+## 🚀 Quick Start
+
+### Build and Test
 
 ```bash
-# Clone the repository
+# Clone and build
 git clone <repository-url>
 cd numaflow-enrichment-app
 
-# Download NLP models (optional - fallback implementation available)
-chmod +x scripts/download-models.sh
-./scripts/download-models.sh
+# Run all tests
+mvn clean test
 
-# Build the application
+# Build application
 mvn clean package
 
-# Run tests
-mvn test
+# Build Docker image
+docker build -t numaflow-enrichment-app:latest .
+```
 
-# Run the application locally
+**Expected Test Results:**
+```
+Tests run: 26, Failures: 0, Errors: 0, Skipped: 0
+✅ All tests passing!
+```
+
+## 🏃‍♂️ Running the Application
+
+### Option 1: Standalone Development Mode
+
+```bash
+# Run Spring Boot application with REST endpoints
 mvn spring-boot:run
+
+# Application available at:
+# - REST API: http://localhost:8080
+# - Health: http://localhost:8080/actuator/health
+# - Metrics: http://localhost:8080/actuator/metrics
 ```
 
-### 2. Local Testing with Docker Compose
+### Option 2: Standalone Numaflow UDF Mode
 
 ```bash
-# Start the complete stack (Kafka + Application)
-docker-compose up -d
+# Run as standalone gRPC server (Numaflow UDF)
+java -cp target/classes:target/dependency/* \
+  com.example.numaflow.StandaloneEnrichmentMapper
 
-# Check service status
-docker-compose ps
-
-# View application logs
-docker-compose logs -f enrichment-app
-
-# Access Kafka UI
-open http://localhost:8090
-
-# Health check
-curl http://localhost:8080/actuator/health
+# Server starts on port 8443 (gRPC)
+# Ready for Numaflow pipeline connection
 ```
 
-### 3. Testing the Application
-
-Once the stack is running, you can test it by sending events to Kafka:
+### Option 3: Docker Container
 
 ```bash
-# Create test event
-echo '{
-  "id": "test-001",
-  "title": "John Doe speaks at Microsoft conference in Seattle",
-  "description": "Software engineer John Doe will present his research on artificial intelligence at the Microsoft developer conference held in Seattle, Washington.",
-  "timestamp": "2024-01-15T10:00:00Z"
-}' > test-event.json
+# Run containerized UDF
+docker run -p 8443:8443 numaflow-enrichment-app:latest
 
-# Send to Kafka (using docker-compose kafka container)
-docker-compose exec kafka kafka-console-producer \
-  --bootstrap-server localhost:9092 \
-  --topic events < test-event.json
-
-# Monitor enriched events
-docker-compose exec kafka kafka-console-consumer \
-  --bootstrap-server localhost:9092 \
-  --topic enriched-events \
-  --from-beginning
+# With custom configuration
+docker run -p 8443:8443 \
+  -e JAVA_OPTS="-Xmx1g" \
+  -e LOG_LEVEL=DEBUG \
+  numaflow-enrichment-app:latest
 ```
 
-## Configuration
+## 🛠️ Configuration
 
-### Application Profiles
-
-- `default`: Local development
-- `test`: Unit testing
-- `docker`: Docker container deployment  
-- `kubernetes`: Kubernetes deployment
-
-### Key Configuration Properties
+### Application Configuration
 
 ```yaml
-app:
-  nlp:
-    fallback-enabled: true
-    models:
-      sentence-model: classpath:models/en-sent.bin
-      tokenizer-model: classpath:models/en-token.bin
-      ner-models:
-        person: classpath:models/en-ner-person.bin
-        location: classpath:models/en-ner-location.bin
-        organization: classpath:models/en-ner-organization.bin
+# application.yml
+spring:
+  application:
+    name: numaflow-enrichment-app
+  profiles:
+    active: production
+
+logging:
+  level:
+    com.example.numaflow: INFO
+    io.numaproj: DEBUG
+
+# Numaflow UDF Configuration
+numaflow:
+  udf:
+    server:
+      port: 8443
+      info-file: "/tmp/numaflow-server-info"
+
+# NLP Processing Configuration
+nlp:
+  models:
+    path: "/app/models"
+    download-on-startup: false
   processing:
     batch-size: 100
-    timeout-ms: 30000
+    timeout-ms: 5000
 ```
 
-## API Endpoints
+### Environment Variables
 
-### Management Endpoints
+```bash
+# JVM Options
+JAVA_OPTS="-Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
-| Endpoint | Description |
-|----------|-------------|
-| `/actuator/health` | Application health status |
-| `/actuator/info` | Application information |
-| `/actuator/metrics` | Application metrics |
-| `/actuator/prometheus` | Prometheus metrics |
+# Application Settings
+SPRING_PROFILES_ACTIVE=production
+LOG_LEVEL=INFO
 
-### Test Data Generator Endpoints
+# NLP Configuration
+NLP_MODELS_PATH=/app/models
+NLP_DOWNLOAD_MODELS=false
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/test/generate` | POST | Generate test events at specified rate |
-| `/api/test/generate-batch` | POST | Generate batch of events immediately |
-| `/api/test/sample` | GET | Generate small sample of test events |
-| `/api/test/info` | GET | Get generator service information |
+# Numaflow Settings
+NUMAFLOW_UDF_PORT=8443
+NUMAFLOW_INFO_FILE=/tmp/numaflow-server-info
+```
+
+## 📊 API Endpoints (Development Mode)
+
+### Event Enrichment
+
+```bash
+# Enrich single event
+curl -X POST http://localhost:8080/api/v1/events/enrich \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Apple announces new iPhone",
+    "description": "Apple Inc. unveiled the new iPhone at their Cupertino headquarters."
+  }'
+
+# Batch enrichment
+curl -X POST http://localhost:8080/api/v1/events/enrich/batch \
+  -H "Content-Type: application/json" \
+  -d '[{"title": "Event 1"}, {"title": "Event 2"}]'
+```
+
+### Health and Monitoring
+
+```bash
+# Application health
+curl http://localhost:8080/actuator/health
+
+# Processing metrics
+curl http://localhost:8080/actuator/metrics/numaflow.enrichment.processed
+
+# JVM metrics
+curl http://localhost:8080/actuator/metrics/jvm.memory.used
+```
 
 ## Data Models
 
@@ -509,56 +588,74 @@ else
 fi
 ```
 
-## Kubernetes Deployment
+## ☸️ Kubernetes Deployment
 
-### Prerequisites
-
-1. Kubernetes cluster with Numaflow installed
-2. Kafka running in the cluster
-3. Container registry access
-
-### Build and Push Image
+### Deploy Complete Numaflow Pipeline
 
 ```bash
-# Build Docker image
-docker build -t numaflow/text-enrichment-app:latest .
-
-# Tag for your registry
-docker tag numaflow/text-enrichment-app:latest your-registry/text-enrichment-app:latest
-
-# Push to registry
-docker push your-registry/text-enrichment-app:latest
-```
-
-### Deploy to Kubernetes
-
-```bash
-# Create namespace
+# 1. Install Numaflow (if not already installed)
 kubectl create namespace numaflow-system
+kubectl apply -f https://github.com/numaproj/numaflow/releases/latest/download/install.yaml
 
-# Deploy the application
-kubectl apply -f k8s/deployment.yaml
+# 2. Deploy Kafka (for development)
+kubectl apply -f k8s/kafka-deployment.yaml
 
-# Deploy the Numaflow pipeline
+# 3. Create Kafka topics
+kubectl exec -it kafka-0 -- kafka-topics.sh \
+  --create --topic input-events --bootstrap-server localhost:9092
+kubectl exec -it kafka-0 -- kafka-topics.sh \
+  --create --topic enriched-events --bootstrap-server localhost:9092
+kubectl exec -it kafka-0 -- kafka-topics.sh \
+  --create --topic skipped-events --bootstrap-server localhost:9092
+kubectl exec -it kafka-0 -- kafka-topics.sh \
+  --create --topic error-events --bootstrap-server localhost:9092
+
+# 4. Build and push Docker image
+docker build -t your-registry/numaflow-enrichment-app:latest .
+docker push your-registry/numaflow-enrichment-app:latest
+
+# 5. Update image reference in pipeline manifest
+# Edit k8s/numaflow-pipeline.yaml to use your image
+
+# 6. Deploy the pipeline
 kubectl apply -f k8s/numaflow-pipeline.yaml
-
-# Check deployment status
-kubectl get pods -n numaflow-system
-kubectl get pipeline -n numaflow-system
 ```
 
-### Monitor the Pipeline
+### Monitor Pipeline
 
 ```bash
 # Check pipeline status
-kubectl describe pipeline text-enrichment-pipeline -n numaflow-system
+kubectl get pipeline enrichment-pipeline
 
-# View application logs
-kubectl logs -f deployment/text-enrichment-app -n numaflow-system
+# View vertex status
+kubectl get vertices
 
-# Check metrics
-kubectl port-forward svc/text-enrichment-service 8080:80 -n numaflow-system
+# Check logs
+kubectl logs -l app=enrichment-vertex -f
+
+# Monitor processing metrics
+kubectl port-forward svc/enrichment-vertex 8080:8080
 curl http://localhost:8080/actuator/metrics
+```
+
+### Send Test Messages
+
+```bash
+# Send test event to input topic
+kubectl exec -it kafka-0 -- kafka-console-producer.sh \
+  --topic input-events --bootstrap-server localhost:9092
+
+# Paste JSON event:
+{
+  "title": "John Doe speaks at Microsoft conference in Seattle",
+  "description": "Software engineer John Doe will present research on AI at the Microsoft developer conference in Seattle, Washington.",
+  "timestamp": "2025-09-15T22:00:00Z",
+  "id": "test-001"
+}
+
+# Monitor enriched output
+kubectl exec -it kafka-0 -- kafka-console-consumer.sh \
+  --topic enriched-events --bootstrap-server localhost:9092 --from-beginning
 ```
 
 ## Development
@@ -579,20 +676,38 @@ mvn package
 mvn package -DskipTests
 ```
 
-### Testing
+## 🧪 Testing
+
+### Run All Tests
 
 ```bash
-# Run unit tests
+# Unit and integration tests
 mvn test
 
-# Run integration tests
-mvn test -Dtest="*IntegrationTest"
+# Specific test suite
+mvn test -Dtest=EnrichmentIntegrationTest
+mvn test -Dtest=EventEnrichmentServiceTest
+mvn test -Dtest=NlpEnrichmentServiceTest
+```
 
-# Run specific test class
-mvn test -Dtest="NlpEnrichmentServiceTest"
+### Test Coverage
 
-# Generate test coverage report
-mvn jacoco:report
+- **EnrichmentIntegrationTest**: End-to-end Numaflow integration
+- **EventEnrichmentServiceTest**: Service layer functionality
+- **NlpEnrichmentServiceTest**: NLP processing capabilities
+- **Performance Tests**: Load and stress testing scenarios
+
+### Manual Testing with Numaflow
+
+```bash
+# 1. Start local UDF server
+java -cp target/classes:target/dependency/* \
+  com.example.numaflow.StandaloneEnrichmentMapper
+
+# 2. Use Numaflow CLI to test
+numaflow udf test \
+  --server localhost:8443 \
+  --payload '{"title":"Test Event","description":"Test description"}'
 ```
 
 ### Code Quality

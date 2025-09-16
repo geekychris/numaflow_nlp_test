@@ -4,7 +4,9 @@ import com.example.numaflow.NumaflowEnrichmentApplication;
 import com.example.numaflow.model.EnrichedEvent;
 import com.example.numaflow.model.Event;
 import com.example.numaflow.service.EventEnrichmentService;
+import com.example.numaflow.vertex.EnrichmentVertex;
 import com.fasterxml.jackson.databind.ObjectMapper;
+// Removed Numaflow SDK dependencies - using direct method calls instead
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +26,9 @@ class EnrichmentIntegrationTest {
     
     @Autowired
     private EventEnrichmentService eventEnrichmentService;
+    
+    @Autowired
+    private EnrichmentVertex enrichmentVertex;
     
     @Autowired
     private ObjectMapper objectMapper;
@@ -154,6 +159,49 @@ class EnrichmentIntegrationTest {
         assertThat(eventEnrichmentService.canEnrichEvent(validEvent)).isTrue();
         assertThat(eventEnrichmentService.canEnrichEvent(emptyEvent)).isFalse();
         assertThat(eventEnrichmentService.canEnrichEvent(null)).isFalse();
+    }
+    
+    @Test
+    void numaflowUDF_shouldProcessEventCorrectly() throws Exception {
+        // Given - Create a sample event as JSON payload
+        Event sampleEvent = createSampleEvent();
+        String eventJson = objectMapper.writeValueAsString(sampleEvent);
+        
+        // When - Process through UDF direct method
+        String enrichedJson = enrichmentVertex.processEvent(eventJson);
+        
+        // Then - Verify UDF processing results
+        assertThat(enrichedJson).isNotEmpty();
+        
+        // Extract the processed message
+        EnrichedEvent enrichedEvent = objectMapper.readValue(enrichedJson, EnrichedEvent.class);
+        
+        // Verify enrichment occurred
+        assertThat(enrichedEvent).isNotNull();
+        assertThat(enrichedEvent.getOriginalEvent().getId()).isEqualTo(sampleEvent.getId());
+        assertThat(enrichedEvent.getAllTextSegments()).isNotEmpty();
+        assertThat(enrichedEvent.getAllNamedEntities()).isNotEmpty();
+        assertThat(enrichedEvent.getEnrichmentMetadata().get("status")).isEqualTo("enriched");
+    }
+    
+    @Test
+    void numaflowUDF_shouldHandleSkippedEvents() throws Exception {
+        // Given - Create an event that cannot be enriched (empty fields)
+        Event emptyEvent = new Event("", "");
+        emptyEvent.setId(UUID.randomUUID().toString());
+        String eventJson = objectMapper.writeValueAsString(emptyEvent);
+        
+        // When - Process through UDF direct method
+        String enrichedJson = enrichmentVertex.processEvent(eventJson);
+        
+        // Then - Verify skipped processing
+        assertThat(enrichedJson).isNotEmpty();
+        
+        EnrichedEvent enrichedEvent = objectMapper.readValue(enrichedJson, EnrichedEvent.class);
+        
+        // Verify it was marked as skipped
+        assertThat(enrichedEvent.getEnrichmentMetadata().get("status")).isEqualTo("skipped");
+        assertThat(enrichedEvent.getEnrichmentMetadata().get("reason")).isEqualTo("no_text_fields");
     }
     
     private Event createSampleEvent() {

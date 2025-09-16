@@ -91,6 +91,17 @@ spec:
             linger.ms: "5"
             compression.type: "snappy"
 
+    # Skipped events sink
+    - name: skipped-sink
+      sink:
+        kafka:
+          brokers:
+            - kafka.kafka:9092
+          topic: skipped-events
+          config:
+            acks: "all"
+            retries: "3"
+
     # Error handling sink
     - name: error-sink
       sink:
@@ -106,18 +117,27 @@ spec:
   edges:
     - from: kafka-source
       to: text-enricher
-      conditions:
-        keyIn: []  # Process all messages
     
     - from: text-enricher
       to: enriched-sink
       conditions:
-        keyIn: []  # All successful processing results
+        tags:
+          operator: or
+          values: ["enriched"]
+    
+    - from: text-enricher  
+      to: skipped-sink
+      conditions:
+        tags:
+          operator: or
+          values: ["skipped"]
     
     - from: text-enricher
       to: error-sink
       conditions:
-        keyIn: ["error"]  # Only error messages
+        tags:
+          operator: or
+          values: ["error"]
 
   # Global pipeline settings
   limits:

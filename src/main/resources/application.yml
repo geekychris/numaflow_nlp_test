@@ -6,24 +6,13 @@ spring:
       write-dates-as-timestamps: false
     deserialization:
       fail-on-unknown-properties: false
-  kafka:
-    bootstrap-servers: localhost:9092
-    consumer:
-      group-id: enrichment-service
-      auto-offset-reset: earliest
-      enable-auto-commit: true
-    producer:
-      acks: all
-      retries: 2147483647
-      properties:
-        enable.idempotence: true
-        max.in.flight.requests.per.connection: 5
+  # Numaflow handles message routing, no Kafka configuration needed
 
 # Logging configuration
 logging:
   level:
     com.example.numaflow: DEBUG
-    org.springframework.kafka: INFO
+    io.numaproj.numaflow: INFO
     opennlp: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
@@ -48,11 +37,22 @@ info:
     description: Numaflow text enrichment application with NLP processing
     version: 0.0.1-SNAPSHOT
 
-# Server configuration (for health checks)
+# Server configuration (for health checks and Numaflow UDF service)
 server:
   port: 8080
   servlet:
     context-path: /
+
+# Numaflow UDF configuration
+numaflow:
+  udf:
+    server:
+      port: 8080  # Port for Numaflow UDF server
+    grpc:
+      max-message-size: 4194304  # 4MB max message size
+    processing:
+      max-batch-size: 100
+      timeout-ms: 30000
 
 # Custom application properties
 app:

@@ -4,52 +4,44 @@ import com.example.numaflow.model.EnrichedEvent;
 import com.example.numaflow.model.Event;
 import com.example.numaflow.service.EventEnrichmentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.numaproj.numaflow.mapper.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Kafka-based event enrichment processor (can be adapted for Numaflow later).
+ * Numaflow Mapper implementation for text enrichment processing.
+ * This class implements the Numaflow Mapper interface to process events in a Numaflow pipeline.
  */
 @Component
-public class EnrichmentVertex {
+public class EnrichmentVertex extends Mapper {
     
     private static final Logger logger = LoggerFactory.getLogger(EnrichmentVertex.class);
     
     private final EventEnrichmentService enrichmentService;
     private final ObjectMapper objectMapper;
-    private final KafkaTemplate<String, String> kafkaTemplate;
     
     public EnrichmentVertex(EventEnrichmentService enrichmentService, 
-                           ObjectMapper objectMapper,
-                           KafkaTemplate<String, String> kafkaTemplate) {
+                           ObjectMapper objectMapper) {
         this.enrichmentService = enrichmentService;
         this.objectMapper = objectMapper;
-        this.kafkaTemplate = kafkaTemplate;
     }
     
     /**
-     * Kafka listener for incoming events to be enriched.
+     * Numaflow Mapper interface implementation.
+     * This is the main entry point called by Numaflow to process messages.
      */
-    @KafkaListener(topics = "events", groupId = "enrichment-service")
-    public void processEvent(@Payload String eventJson,
-                           @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-                           @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-                           @Header(KafkaHeaders.OFFSET) long offset) {
-        
+    @Override
+    public MessageList processMessage(String[] keys, Datum datum) {
         try {
-            logger.debug("Processing event from topic: {}, partition: {}, offset: {}", 
-                topic, partition, offset);
+            logger.debug("Processing Numaflow datum with keys: {} at time: {}", 
+                String.join(",", keys), datum.getEventTime());
             
-            // Parse the incoming message as an Event
+            // Parse the incoming message payload as an Event
+            String eventJson = new String(datum.getValue());
             Event event = objectMapper.readValue(eventJson, Event.class);
             
             // Set ID if not present
@@ -57,33 +49,27 @@ public class EnrichmentVertex {
                 event.setId(UUID.randomUUID().toString());
             }
             
-            // Process the event
+            // Process the event through our enrichment service
             EnrichedEvent enrichedEvent = processEventInternal(event);
             
-            // Send to output topic
+            // Serialize the enriched event
             String enrichedJson = objectMapper.writeValueAsString(enrichedEvent);
             
-            // Determine output topic based on processing result
-            final String outputTopic = "skipped".equals(enrichedEvent.getEnrichmentMetadata().get("status")) 
-                ? "skipped-events" 
-                : "enriched-events";
+            // Determine output tags based on processing result
+            String[] outputTags = determineOutputTags(enrichedEvent);
             
-            final String eventId = event.getId();
+            // Create output message with tags for routing
+            Message outputMessage = new Message(enrichedJson.getBytes(), outputTags);
             
-            kafkaTemplate.send(outputTopic, eventId, enrichedJson)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        logger.error("Failed to send enriched event to topic {}", outputTopic, ex);
-                    } else {
-                        logger.debug("Successfully sent enriched event {} to topic {}", 
-                            eventId, outputTopic);
-                    }
-                });
+            logger.debug("Successfully processed event ID: {}, output tags: {}", 
+                event.getId(), String.join(",", outputTags));
+            
+            return MessageList.newBuilder().addMessage(outputMessage).build();
             
         } catch (Exception e) {
-            logger.error("Failed to process event from topic: {}", topic, e);
+            logger.error("Error processing message in Numaflow mapper", e);
             
-            // Send error to error topic
+            // Return error message with "error" tag for routing to error sink
             try {
                 ErrorResponse errorResponse = new ErrorResponse(
                     UUID.randomUUID().toString(),
@@ -93,11 +79,58 @@ public class EnrichmentVertex {
                 );
                 
                 String errorJson = objectMapper.writeValueAsString(errorResponse);
-                kafkaTemplate.send("enrichment-errors", errorResponse.id, errorJson);
+                Message errorMessage = new Message(errorJson.getBytes(), new String[]{"error"});
                 
-            } catch (Exception serializationError) {
-                logger.error("Failed to serialize error response", serializationError);
+                return MessageList.newBuilder().addMessage(errorMessage).build();
+                
+            } catch (Exception jsonError) {
+                logger.error("Failed to serialize error response", jsonError);
+                
+                // Fallback: return simple error message
+                String fallbackError = "{\"error\":\"Failed to process message\"}";
+                Message fallbackMessage = new Message(fallbackError.getBytes(), new String[]{"error"});
+                
+                return MessageList.newBuilder().addMessage(fallbackMessage).build();
             }
+        }
+    }
+    
+    /**
+     * Process JSON event payload and return enriched result as JSON.
+     * This method can be used for direct testing.
+     */
+    public String processEvent(String eventJson) throws Exception {
+        logger.debug("Processing event JSON: {}", eventJson);
+        
+        // Parse the incoming message as an Event
+        Event event = objectMapper.readValue(eventJson, Event.class);
+        
+        // Set ID if not present
+        if (event.getId() == null || event.getId().isEmpty()) {
+            event.setId(UUID.randomUUID().toString());
+        }
+        
+        // Process the event
+        EnrichedEvent enrichedEvent = processEventInternal(event);
+        
+        // Serialize the enriched event
+        String enrichedJson = objectMapper.writeValueAsString(enrichedEvent);
+        
+        logger.debug("Successfully processed event with ID: {}", event.getId());
+        
+        return enrichedJson;
+    }
+    
+    /**
+     * Determines output tags based on the enriched event status.
+     */
+    private String[] determineOutputTags(EnrichedEvent enrichedEvent) {
+        Object statusObj = enrichedEvent.getEnrichmentMetadata().get("status");
+        String status = statusObj != null ? statusObj.toString() : "unknown";
+        if ("skipped".equals(status)) {
+            return new String[]{"skipped"};
+        } else {
+            return new String[]{"enriched"};
         }
     }
     
