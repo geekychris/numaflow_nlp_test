@@ -1,0 +1,79 @@
+spring:
+  application:
+    name: numaflow-enrichment-app-local
+  profiles:
+    active: local
+  kafka:
+    # Local Kafka configuration (will be used if Kafka is available locally)
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: text-enrichment-local
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      retries: 3
+      acks: all
+
+# Server configuration for local REST API
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Logging configuration for development
+logging:
+  level:
+    com.example.numaflow: DEBUG
+    io.numaproj.numaflow: DEBUG
+    org.springframework.kafka: INFO
+    org.apache.kafka: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Management endpoints for monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env,configprops,beans
+  endpoint:
+    health:
+      show-details: always
+
+# Local development app configuration
+app:
+  mode: local-development  # This flag indicates we're in local mode
+  
+  nlp:
+    fallback-enabled: true
+    models:
+      # Use classpath models for local development
+      sentence-model: classpath:models/en-sent.bin
+      tokenizer-model: classpath:models/en-token.bin
+      ner-models:
+        person: classpath:models/en-ner-person.bin
+        location: classpath:models/en-ner-location.bin
+        organization: classpath:models/en-ner-organization.bin
+  
+  processing:
+    batch-size: 50    # Smaller batches for development
+    timeout-ms: 10000 # Shorter timeout for faster feedback
+  
+  # Kafka topics for local testing
+  kafka:
+    topics:
+      input: events
+      enriched: enriched-events
+      skipped: skipped-events
+      errors: error-events
+
+# Test data generator with smaller limits for local testing
+  test-generator:
+    limits:
+      max-count: 1000
+      max-rate-per-second: 100
+      max-batch-count: 100
+    default-topic: events

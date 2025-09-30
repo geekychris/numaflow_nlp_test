@@ -1,0 +1,91 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Java
+*.class
+*.log
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+*.swp
+*.swo
+*~
+
+# Eclipse
+.project
+.classpath
+.metadata/
+.settings/
+bin/
+tmp/
+*.tmp
+*.bak
+
+# Spring Boot
+spring-boot-*.jar
+application-*.yml.backup
+
+# Logs
+logs/
+*.log
+log/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Local development
+.env
+.env.local
+local.properties
+
+# NLP Models (download these separately)
+models/*.bin
+models/*.model
+src/main/resources/models/*.bin
+src/main/resources/models/*.model
+
+# Test results
+/target/surefire-reports/
+/target/failsafe-reports/
+test-output/
+
+# Coverage
+/target/site/jacoco/
+
+# Local testing
+test-results/
+performance-results/
+
+# Temporary files
+temp/
+tmp/
