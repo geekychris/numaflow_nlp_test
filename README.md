@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Numaflow NLP Test logo" width="180">
+</p>
+
 # Numaflow Text Enrichment Application
 
 A production-ready Numaflow application that provides advanced text enrichment capabilities using Apache OpenNLP for Named Entity Recognition (NER) and text segmentation. Designed as a User Defined Function (UDF) for Numaflow streaming pipelines.
